@@ -5,11 +5,19 @@ from django.shortcuts import get_object_or_404, redirect
 from django.views.generic import (CreateView, UpdateView, DeleteView,
                                   ListView, DetailView)
 from django.urls import reverse_lazy, reverse
-from .models import Post, Category, Comment
-from .forms import PostForm, CommentForm, EditProfileForm
 from django.utils.timezone import now
 
+from .functions import get_post
+from .models import Post, Category, Comment
+from .forms import PostForm, CommentForm, EditProfileForm
+
 User = get_user_model()
+
+
+class PostMixin():
+    model = Post
+    template_name = 'blog/create.html'
+    pk_url_kwarg = 'post_id'
 
 
 class IndexListView(ListView):
@@ -20,11 +28,9 @@ class IndexListView(ListView):
     template_name = 'blog/index.html'
 
     def get_queryset(self):
-        return Post.objects.select_related('author').filter(
-            is_published=True,
-            category__is_published=True,
-            pub_date__lte=now(),
-        ).annotate(comment_count=Count('comment')).order_by('-pub_date')
+        return get_post(Post.objects).annotate(
+            comment_count=Count('comments')
+        ).order_by('-pub_date')
 
 
 class PostDetailView(LoginRequiredMixin, DetailView):
@@ -54,7 +60,7 @@ class PostDetailView(LoginRequiredMixin, DetailView):
         context = super().get_context_data(**kwargs)
         context['form'] = CommentForm()
         context['comments'] = (
-            self.get_object().comment.select_related('author')
+            self.get_object().comments.select_related('author')
         )
         return context
 
@@ -67,14 +73,9 @@ class CategoryPostsView(ListView):
     template_name = 'blog/category.html'
 
     def get_queryset(self):
-        return Post.objects.select_related(
-            'author', 'location', 'category',
-        ).filter(
-            is_published=True,
-            category__is_published=True,
+        return get_post(Post.objects).filter(
             category__slug=self.kwargs['category_slug'],
-            pub_date__lte=now(),
-        ).annotate(comment_count=Count('comment')).order_by('-pub_date')
+        ).annotate(comment_count=Count('comments')).order_by('-pub_date')
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -113,7 +114,7 @@ class ProfileListView(ListView):
             'author', 'location', 'category',
         ).filter(
             author=self.author
-        ).annotate(comment_count=Count('comment')).order_by('-pub_date')
+        ).annotate(comment_count=Count('comments')).order_by('-pub_date')
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -138,13 +139,10 @@ class PostCreateView(LoginRequiredMixin, CreateView):
         return reverse('blog:profile', kwargs={'username': self.request.user})
 
 
-class PostEditView(LoginRequiredMixin, UpdateView):
+class PostEditView(LoginRequiredMixin, PostMixin, UpdateView):
     """Редактирование комментария"""
 
-    model = Post
-    pk_url_kwarg = 'post_id'
     form_class = PostForm
-    template_name = 'blog/create.html'
 
     def dispatch(self, request, *args, **kwargs):
         obj = self.get_object()
@@ -156,12 +154,9 @@ class PostEditView(LoginRequiredMixin, UpdateView):
         return reverse('blog:post_detail', args=(self.kwargs['post_id'],))
 
 
-class PostDeleteView(LoginRequiredMixin, DeleteView):
+class PostDeleteView(LoginRequiredMixin, PostMixin, DeleteView):
     """Удаление публикации"""
 
-    model = Post
-    template_name = 'blog/create.html'
-    pk_url_kwarg = 'post_id'
     success_url = reverse_lazy('blog:index')
 
     def dispatch(self, request, *args, **kwargs):
@@ -190,7 +185,7 @@ class CreateCommentView(LoginRequiredMixin, CreateView):
         return super().dispatch(request, *args, **kwargs)
 
     def form_valid(self, form):
-        form.instance.comment = self.post_obj
+        form.instance.comments = self.post_obj
         form.instance.author = self.request.user
         return super().form_valid(form)
 
@@ -203,9 +198,9 @@ class CommentEditView(UpdateView):
     """Редактирование комментария"""
 
     model = Comment
+    template_name = 'blog/comment.html'
     pk_url_kwarg = 'comment_id'
     form_class = CommentForm
-    template_name = 'blog/comment.html'
 
     def dispatch(self, request, *args, **kwargs):
         if self.get_object().author != request.user:

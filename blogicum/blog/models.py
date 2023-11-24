@@ -32,7 +32,7 @@ class Category(BaseModel):
         verbose_name_plural = 'Категории'
 
     def __str__(self):
-        return self.title
+        return self.title[:settings.NUMBER_OF_SYMBOLS]
 
 
 class Location(BaseModel):
@@ -44,7 +44,7 @@ class Location(BaseModel):
         verbose_name_plural = 'Местоположения'
 
     def __str__(self):
-        return self.name
+        return self.name[:settings.NUMBER_OF_SYMBOLS]
 
 
 class Post(BaseModel):
@@ -86,16 +86,16 @@ class Post(BaseModel):
         verbose_name_plural = 'Публикации'
 
     def __str__(self):
-        return self.title
+        return self.title[:settings.NUMBER_OF_SYMBOLS]
 
 
 class Comment(models.Model):
     text = models.TextField('Текст комментария')
-    comment = models.ForeignKey(
+    comments = models.ForeignKey(
         Post,
         on_delete=models.CASCADE,
         null=True,
-        related_name='comment',
+        related_name='comments',
     )
     created_at = models.DateTimeField(auto_now_add=True)
     author = models.ForeignKey(
