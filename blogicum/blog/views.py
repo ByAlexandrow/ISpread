@@ -20,6 +20,14 @@ class PostMixin():
     pk_url_kwarg = 'post_id'
 
 
+class DispatchMixin():
+    def dispatch(self, request, *args, **kwargs):
+        obj = self.get_object()
+        if obj.author != self.request.user:
+            return redirect('blog:post_detail', post_id=self.kwargs['post_id'])
+        return super().dispatch(request, *args, **kwargs)
+
+
 class IndexListView(ListView):
     """Главная страница"""
 
@@ -139,30 +147,19 @@ class PostCreateView(LoginRequiredMixin, CreateView):
         return reverse('blog:profile', kwargs={'username': self.request.user})
 
 
-class PostEditView(LoginRequiredMixin, PostMixin, UpdateView):
+class PostEditView(LoginRequiredMixin, PostMixin, DispatchMixin, UpdateView):
     """Редактирование комментария"""
 
     form_class = PostForm
-
-    def dispatch(self, request, *args, **kwargs):
-        obj = self.get_object()
-        if obj.author != self.request.user:
-            return redirect('blog:post_detail', post_id=self.kwargs['post_id'])
-        return super().dispatch(request, *args, **kwargs)
 
     def get_success_url(self):
         return reverse('blog:post_detail', args=(self.kwargs['post_id'],))
 
 
-class PostDeleteView(LoginRequiredMixin, PostMixin, DeleteView):
+class PostDeleteView(LoginRequiredMixin, PostMixin, DispatchMixin, DeleteView):
     """Удаление публикации"""
 
     success_url = reverse_lazy('blog:index')
-
-    def dispatch(self, request, *args, **kwargs):
-        if self.get_object().author != request.user:
-            return redirect('blog:post_detail', post_id=self.kwargs['post_id'])
-        return super().dispatch(request, *args, **kwargs)
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
